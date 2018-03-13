@@ -41,9 +41,17 @@
 #define setBits(flags,bits) (flags |= (bits))
 #define clrBits(flags,bits) (flags &= ~(bits))
 
-#define VERSION "D4.12.3"
+#define VERSION "4.12.3.EU"
+
 
 #include "Language_default.h"   //Default language should always be included as bottom layer
+
+// UK/EU specific settings (by OpenEnergyMonitor):
+// - Disable AUTOSVCLEVEL (autodetection is designed for split-phase)
+// - Charging level default to L2
+// - Set MAX_CURRENT_CAPACITY_L2 32 (recomended limit for single-phase charging in UK/EU)
+// - Add '.EU' to version number
+
 
 //Language preferences: Add your custom languagefile here. See Language_default.h for more info.
 //#include "Language_norwegian.h"
@@ -51,7 +59,7 @@
 //-- begin features
 
 // auto detect L1/L2
-#define AUTOSVCLEVEL
+//#define AUTOSVCLEVEL
 
 // show disabled tests before POST
 #define SHOW_DISABLED_TESTS
@@ -120,7 +128,7 @@
 #define TIME_LIMIT
 
 // support Mennekes (IEC 62196) type 2 locking pin
-//#define MENNEKES_LOCK
+// #define MENNEKES_LOCK
 
 // Support for Nick Sayer's OpenEVSE II board, which has alternate hardware for ground check/stuck relay check and a voltmeter for L1/L2.
 //#define OPENEVSE_2
@@ -360,14 +368,14 @@
 
 // current capacity in amps
 #define DEFAULT_CURRENT_CAPACITY_L1 12
-#define DEFAULT_CURRENT_CAPACITY_L2 16
+#define DEFAULT_CURRENT_CAPACITY_L2 32
 
 // minimum allowable current in amps
 #define MIN_CURRENT_CAPACITY_J1772 6
 
 // maximum allowable current in amps
 #define MAX_CURRENT_CAPACITY_L1 16 // J1772 Max for L1 on a 20A circuit = 16, 15A circuit = 12
-#define MAX_CURRENT_CAPACITY_L2 80 // J1772 Max for L2 = 80
+#define MAX_CURRENT_CAPACITY_L2 32 // J1772 Max for L2 = 80
 
 //J1772EVSEController
 #define CURRENT_PIN 0 // analog current reading pin ADCx
@@ -655,7 +663,7 @@
 #else
 #define TEMPERATURE_AMBIENT_SHUTDOWN 680
 #endif
-                                                  
+
 //  At this temperature gracefully tell the EV to quit drawing any current, and leave the EVSE in
 //  an over temperature error state.  The EVSE can be restart from the button or unplugged.
 //  If temperatures get to this level it is advised to open the enclosure to look for trouble.
@@ -937,7 +945,7 @@ class Btn {
   uint8_t buttonState;
   unsigned long lastDebounceTime;  // the last time the output pin was toggled
   unsigned long vlongDebounceTime;  // for verylong press
-  
+
 public:
   Btn();
   void init();
@@ -952,7 +960,7 @@ class Menu {
 public:
   PGM_P m_Title;
   uint8_t m_CurIdx;
-  
+
   void init(const char *firstitem);
 
   Menu();
@@ -1232,7 +1240,7 @@ public:
   }
   void ClrManualOverride() { m_ManualOverride = 0; }
   uint8_t ManualOverrideIsSet() { return m_ManualOverride; }
-  
+
   uint8_t IsTimerEnabled(){
     return m_DelayTimerEnabled;
   };
@@ -1321,4 +1329,3 @@ void wdt_delay(uint32_t ms);
 
 #include "strings.h"
 #include "rapi_proc.h"
-
