@@ -41,7 +41,7 @@
 #define setBits(flags,bits) (flags |= (bits))
 #define clrBits(flags,bits) (flags &= ~(bits))
 
-#define VERSION "4.12.3.EU2"
+#define VERSION "4.12.3.EU1T2"
 
 
 #include "Language_default.h"   //Default language should always be included as bottom layer
@@ -50,9 +50,9 @@
 // - Disable AUTOSVCLEVEL (autodetection is designed for split-phase)
 // - Charging level default to L2
 // - Set MAX_CURRENT_CAPACITY_L2 32 (recomended limit for single-phase charging in UK/EU)
-// - Enable PP_AUTO_AMPACITY (don't exceed max current capacity of non-tethered cable)
 // - Add '.EU' to version number
 // - Enable LCD Redra every couple of min (required for EMC/CE)
+// - For non-tethered units (T2 in version) Enable PP_AUTO_AMPACITY (don't exceed max current capacity of non-tethered cable)
 
 
 //Language preferences: Add your custom languagefile here. See Language_default.h for more info.
@@ -77,7 +77,7 @@
 //  to enable/disable charging function
 // if AUTH_LOCK_REG/IDX are also defined (see below), then a hardware pin is
 //  used to control access, rather than RAPI
-//#define AUTH_LOCK
+// #define AUTH_LOCK
 
 // serial remote api
 #define RAPI
