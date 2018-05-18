@@ -221,6 +221,9 @@ class J1772EVSEController {
   int32_t m_ChargingCurrent;
   int16_t m_AmmeterCurrentOffset;
   int16_t m_CurrentScaleFactor;
+#ifdef THREEPHASE_SENSE_ONEPHASE
+  unsigned int m_ThreePhaseChargingSessionIndicators = 0x00FF;
+#endif // THREEPHASE_SENSE_ONEPHASE
 #ifdef CHARGE_LIMIT
   uint8_t m_chargeLimitkWh; // kWh to extend session
   uint32_t m_chargeLimitTotWs; // total Ws limit
@@ -368,7 +371,7 @@ public:
   void SetVoltmeter(uint16_t scale,uint32_t offset);
   uint32_t ReadVoltmeter();
   int32_t GetVoltage() { return m_Voltage; }
-#else
+#else // !VOLTMETER
   uint32_t GetVoltage() { return (uint32_t)-1; }
 #endif // VOLTMETER
 #ifdef AMMETER
@@ -415,6 +418,15 @@ public:
   uint32_t GetChargeLimitTotWs() { return m_chargeLimitTotWs; }
   uint8_t GetChargeLimitkWh() { return m_chargeLimitkWh; }
 #endif // CHARGE_LIMIT
+#ifdef THREEPHASE
+#ifdef THREEPHASE_SENSE_ONEPHASE
+  bool GetIsThreePhaseChargingSession() { return (m_ThreePhaseChargingSessionIndicators > 0x007F); }
+#else // !THREEPHASE_SENSE_ONEPHASE
+  bool GetIsThreePhaseChargingSession() { return true; }
+#endif // THREEPHASE_SENSE_ONEPHASE
+#else // !THREEPHASE
+  bool GetIsThreePhaseChargingSession() { return false; }
+#endif // THREEPHASE
 #else // !AMMETER
   int32_t GetChargingCurrent() { return -1; }
 #endif // AMMETER

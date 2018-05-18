@@ -42,7 +42,9 @@
 #define clrBits(flags,bits) (flags &= ~(bits))
 
 // See platformio.ini
-//#define VERSION "D4.13.0"
+#ifndef VERSION
+#define VERSION "D4.13.0.JH"
+#endif
 
 #include "Language_default.h"   //Default language should always be included as bottom layer
 
@@ -71,6 +73,10 @@
 // Enable three-phase energy calculation
 // Note: three-phase energy will always be calculated even if EV is only using singe-phase. Ony enable if always charging 3-phase EV and aware of this limitation.
 //#define THREEPHASE
+
+#ifdef THREEPHASE
+#define THREEPHASE_SENSE_ONEPHASE
+#endif
 
 // charging access control - if defined, enables RAPI G4/S4 commands
 //  to enable/disable charging function
@@ -621,12 +627,9 @@
 //  #define VOLTS_FOR_L2 230   // conventional for most of the world
 #endif // KWH_RECORDING
 
-// The maximum number of milliseconds to sample an ammeter pin in order to find three zero-crossings.
-// one and a half cycles at 50 Hz is 30 ms.
-#define CURRENT_SAMPLE_INTERVAL 35
-
-// Once we detect a zero-crossing, we should not look for one for another quarter cycle or so. 1/4 // cycle at 50 Hz is 5 ms.
-#define CURRENT_ZERO_DEBOUNCE_INTERVAL 5
+// The maximum number of microseconds to sample an ammeter pin in order to find three zero-crossings.
+// one and a half cycles at 50 Hz is 30 ms (30 000 µs).
+#define CURRENT_SAMPLE_INTERVAL 35000
 
 #endif // AMMETER
 

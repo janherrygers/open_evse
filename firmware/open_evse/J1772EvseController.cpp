@@ -59,23 +59,78 @@ void J1772EVSEController::readAmmeter()
 
   unsigned long sum = 0;
   unsigned int zero_crossings = 0;
-  unsigned long last_zero_crossing_time = 0, now_ms;
-  long last_sample = -1; // should be impossible - the A/d is 0 to 1023.
+  unsigned long now_us;
   unsigned int sample_count = 0;
-  for(unsigned long start = millis(); ((now_ms = millis()) - start) < CURRENT_SAMPLE_INTERVAL; ) {
+
+  byte current_sign_indicators = 0x03; // zeroes are added to the left, ones are added to the right, when the indicator is half zeroes, half ones, the sign has switched
+  byte current_last_sign = 0xAA; // last confirmed sign for current
+#ifdef THREEPHASE_SENSE_ONEPHASE
+  unsigned int voltage_pulse_time = 0, current_pulse_time = 0;
+  unsigned long first_current_zero_crossing_time;
+  byte voltage_last_sign = 0xAA; // last confirmed sign for voltage
+  byte voltage_sign_indicators = 0x03; // zeroes are added to the left, ones are added to the right, when the indicator is half zeroes, half ones, the sign has switched
+#endif // THREEPHASE_SENSE_ONEPHASE
+
+  for(unsigned long start = micros(); ((now_us = micros()) - start) < CURRENT_SAMPLE_INTERVAL; ) {
     long sample = (long) adcCurrent.read();
-    // If this isn't the first sample, and if the sign of the value differs from the
-    // sign of the previous value, then count that as a zero crossing.
-    if (last_sample != -1 && ((last_sample > 512) != (sample > 512))) {
-      // Once we've seen a zero crossing, don't look for one for a little bit.
-      // It's possible that a little noise near zero could cause a two-sample
-      // inversion.
-      if ((now_ms - last_zero_crossing_time) > CURRENT_ZERO_DEBOUNCE_INTERVAL) {
-        zero_crossings++;
-        last_zero_crossing_time = now_ms;
+#ifdef THREEPHASE_SENSE_ONEPHASE
+    // convention: AC2 is connected to the line where the current is being sampled
+    //             this should be L1, because that one is used for one phase charging
+    // voltage is only detected during the positive half of the AC sine wave (compared to ground/earth)
+    // because of the voltage detection circuitry, the only the "top of the waveform" is detected, rather than the complete positive half
+
+    // pinAC2 is active low, "true" means no positive voltage at the moment
+    voltage_sign_indicators = (pinAC2.read()) ? voltage_sign_indicators >> 1 : (voltage_sign_indicators << 1) | 1;
+#endif // THREEPHASE_SENSE_ONEPHASE
+    current_sign_indicators = (sample < 512) ? current_sign_indicators >> 1 : (current_sign_indicators << 1) | 1;
+
+    // still initialising detection?
+    if (current_last_sign == 0xAA)
+    {
+      // initial samples were 2 zeroes? (or 3 zeroes with a one in between, etc.)
+      if (current_sign_indicators == 0x00)
+      {
+        current_last_sign = 0x00;
+      }
+      // initial samples were 2 ones? (or 3 ones with a zero in between, etc.)
+      else if (current_sign_indicators == 0x0F)
+      {
+        current_last_sign = 0xFF;
+        current_sign_indicators = 0xFF;
       }
     }
-    last_sample = sample;
+    // 4 samples at the "other side of zero" detected?
+    else if (current_sign_indicators == 0x0F)
+    {
+      current_last_sign = ~current_last_sign;
+      current_sign_indicators = current_last_sign;
+      zero_crossings++;
+
+#ifdef THREEPHASE_SENSE_ONEPHASE
+      switch(zero_crossings)
+      {
+      case 1: // first zero crossing just happened
+        first_current_zero_crossing_time = now_us;
+      case 2: // first or second zero crossing just happened
+        // measure center of "current positive pulse" so we can compare it to the
+        // voltage waveform (pulse of the voltage wave should be centered on the
+        // positive part of the current wave)
+        if (current_last_sign == 0xFF)
+        {
+          current_pulse_time = now_us - first_current_zero_crossing_time;
+        }
+      }
+      // first, second or third zero crossing just happened
+      if (current_last_sign == 0x00 && zero_crossings > 1)
+      {
+        // yes, the content of "current_pulse_time" changes
+        // from "time at start of the current positive pulse"
+        // to "time at center of the current positive pulse"
+        current_pulse_time = (current_pulse_time + (now_us - first_current_zero_crossing_time)) / 2;
+      }
+#endif // THREEPHASE_SENSE_ONEPHASE
+    }
+
     switch(zero_crossings) {
     case 0: 
       continue; // Still waiting to start sampling
@@ -84,17 +139,81 @@ void J1772EVSEController::readAmmeter()
       // Gather the sum-of-the-squares and count how many samples we've collected.
       sum += (unsigned long)((sample - 512) * (sample - 512));
       sample_count++;
+
+#ifdef THREEPHASE_SENSE_ONEPHASE
+      // still initialising detection?
+      if (voltage_last_sign == 0xAA)
+      {
+        // initial samples were 2 zeroes? (or 3 zeroes with a one in between, etc.)
+        if (voltage_sign_indicators == 0x00)
+        {
+          voltage_last_sign = 0x00;
+        }
+        // no else: we are only interested in a positive pulse where we observe the start and the end,
+        // so keep the voltage_last_sign in its initial state till we have a confirmed "00"
+      }
+      // 4 samples at the "other side of zero" detected?
+      else if (voltage_sign_indicators == 0x0F)
+      {
+        voltage_last_sign = ~voltage_last_sign;
+        voltage_sign_indicators = voltage_last_sign;
+
+        // measure center of "voltage positive pulse" so we can compare it to the
+        // current waveform (pulse should be centered on the positive part of the
+        // current wave) in case of one phase power
+        if (voltage_last_sign > 0)
+        {
+          voltage_pulse_time = now_us - first_current_zero_crossing_time;
+        }
+        else
+        {
+          // yes, the content of "voltage_pulse_time" changes
+          // from "time at start of the voltage positive pulse"
+          // to "time at center of the voltage positive pulse"
+          voltage_pulse_time = (voltage_pulse_time + (now_us - first_current_zero_crossing_time)) / 2;
+        }
+      }
+#endif // THREEPHASE_SENSE_ONEPHASE
       continue;
     case 3:
       // The answer is the square root of the mean of the squares.
       // But additionally, that value must be scaled to a real current value.
       // we will do that elsewhere
       m_AmmeterReading = ulong_sqrt(sum / sample_count);
+#ifdef THREEPHASE_SENSE_ONEPHASE
+      // haven't detected the end of the voltage pulse yet?
+      // in this case act as if now is the end of the voltage pulse
+      // the center of the pulse will be detected too far to the left,
+      // but it should not trigger a false one phase result because
+      // the measured voltage positive pulse is usually 5 ms narrower
+      // than the measured positive pulse of the current
+      if (voltage_last_sign > 0)
+      {
+        // yes, the content of "voltage_pulse_time" changes
+        // from "time at start of the voltage positive pulse"
+        // to "time at center of the voltage positive pulse"
+        voltage_pulse_time = (voltage_pulse_time + (now_us - first_current_zero_crossing_time)) / 2;
+      }
+
+      // If the center of the positive part of the waveform for voltage and current lie less than 1 666 µs apart, then they are in phase.
+      // Value of 1 666 µs is arbitrarily chosen for coping with sample inversion near zero, slight delay between sampling current and voltage, and small phase differences.
+      // if current and voltage are sampled from a different phase, then in theory the tops of the waves will lie 6 666 µs apart for 50 Hz, 5 555 µs for 60 Hz
+      // if current is sampled from a combination of 2 phases and voltage is sampled from one of those phases, then in theory the tops of the waves will lie 3 333 µs apart for 50 Hz, 2 777 µs for 60 Hz
+      // if current and voltage are in counterphase, then in theory the tops of the waves will lie 10 000 µs apart for 50 Hz, 8 333 µs for 60 Hz
+      // convention: when current and voltage are in phase, we are charging on one phase
+
+      m_ThreePhaseChargingSessionIndicators = ((abs((signed int) (voltage_pulse_time - current_pulse_time))) < 1666) ?
+                                                    m_ThreePhaseChargingSessionIndicators >> 1 :
+                                                    (m_ThreePhaseChargingSessionIndicators << 1) | 1;
+#endif // THREEPHASE_SENSE_ONEPHASE
       return;
     }
   }
   // ran out of time. Assume that it's simply not oscillating any. 
   m_AmmeterReading = 0;
+#ifdef THREEPHASE_SENSE_ONEPHASE
+  m_ThreePhaseChargingSessionIndicators = 0x00FF;
+#endif // THREEPHASE_SENSE_ONEPHASE
 
   WDT_RESET();
 }
